@@ -1,0 +1,18 @@
+{% if onboarding %}
+<h1 class="mb-4">Complete your Profile</h1>
+{% else %}
+<h1 class="mb-4">Edit your Profile</h1>
+{% endif %}
+
+<form method='post' enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type='submit'>Update Profile</button>
+     {% if onboarding %}
+    <a class="button button-gray ml-1" href="{% url 'accounts:home' %}">Skip</a>
+    {% else %}
+    {% comment %}if you change your mind about the profile update, you can cancel and all the values of fields will be got back to 
+    first version.  request.META.HTTP_REFERER helps us to do that{% endcomment %}
+    <a class="button button-gray ml-1" href="{{ request.META.HTTP_REFERER }}">Cancel</a>
+    {% endif %}
+</form> 

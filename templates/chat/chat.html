@@ -1,22 +1,21 @@
-{% comment %} {% extends 'layouts/blank.html' %} {% endcomment %}
-
 {% block content %} 
 
 <wrapper class="block max-w-2xl mx-auto my-10 px-6">
     {% if chat_group.groupchat_name %}
     <div class="flex justify-between">
-    <h2>{{ chat_group.groupchat_name }}</h2>
-    {% if user == chat_group.admin %}
-    <a href="{% url 'edit-chatroom' chat_group.chat_name %}">
-        <div class="p-2 bg-gray-200 hover:bg-blue-600 rounded-lg group">
-            <svg class="fill-gray-500 group-hover:fill-white" width="16" height="16">
-                <path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm.176 4.823L9.75 4.81l-6.286 6.287a.253.253 0 0 0-.064.108l-.558 1.953 1.953-.558a.253.253 0 0 0 .108-.064Zm1.238-3.763a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354Z"></path>
-            </svg>
-        </div>
-    </a>
-    {% endif %}
+        <h2>{{ chat_group.groupchat_name }}</h2>
+        {% if user == chat_group.admin %}
+        <a href="{% url 'edit-chatroom' chat_group.chat_name %}">
+            <div class="p-2 bg-gray-200 hover:bg-blue-600 rounded-lg group">
+                <svg class="fill-gray-500 group-hover:fill-white" width="16" height="16">
+                    <path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm.176 4.823L9.75 4.81l-6.286 6.287a.253.253 0 0 0-.064.108l-.558 1.953 1.953-.558a.253.253 0 0 0 .108-.064Zm1.238-3.763a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354Z"></path>
+                </svg>
+            </div>
+        </a>
+        {% endif %}
     </div>
     {% endif %}
+
     <div id="chat_window" class="h-[45rem] flex flex-col bg-gray-800 rounded-2xl shadow-2xl relative p-1">
         <div class="flex justify-center text-emerald-400 bg-gray-800 p-2 sticky top-0 z-10">
             {% if chat_group.groupchat_name %}
@@ -35,54 +34,75 @@
             <span id="online-count" class="pr-1"></span>online
             {% endif %}
         </div>
-        <div id='chat_container' class="overflow-y-auto grow">
-            <ul id='chat_messages' class="flex flex-col justify-end gap-2 p-4">
+
+        <div id="chat_container" class="overflow-y-auto grow">
+            <div id="chat_messages" class="flex flex-col justify-end gap-2 p-4">
                 {% for message in chat_messages reversed %}
-                {% include 'chat/chat_message.html' %}
+                    {% include 'chat/chat_message.html' %}
                 {% endfor %}
-            </ul>
+            </div>
         </div>
+
+        <!-- Chat input (no <form>) -->
         <div class="sticky bottom-0 z-10 p-2 bg-gray-800">
-            <div class="flex flex-col gap-4 items-center rounded-xl px-2 py-2">
-                <form id="chat_message_form" class="w-full"
-                    hx-ext="ws"
-                    ws-connect="/ws/chatroom/{{ chatroom_name }}"
-                    ws-send 
-                    _="on htmx:wsAfterSend reset() me">
-                    {% csrf_token %}
-                    {{ form }}
-                </form>
-                <form id="chat_file_form" enctype="multipart/form-data" class="flex items-center w-full" 
-                    hx-target="#chat_messages"
-                    hx-swap="beforeend" 
-                    _="on htmx:beforeSend reset() me" >
-                    {% csrf_token %}
-                    <input type="file" name="file" id="id_file" class="!bg-transparent text-gray-400">
-                    <button type="submit" class="whitespace-nowrap !text-sm !py-3 !px-4 h-fit">Submit File</button>
-                </form>
+            <div class="flex gap-2 items-center">
+                <input 
+                    id="chat-message-input"
+                    type="text"
+                    placeholder="Add message..."
+                    class="flex-1 p-2 rounded-md"
+                    maxlength="300"
+                    autofocus
+                />
+                <button id="chat-message-submit" class="p-2 bg-blue-600 text-white rounded-md">Send</button>
             </div>
         </div>
     </div>
-    {% comment %} {% if chat_group.members.exists %}
-    <a href="{% url 'chatroom-leave' chat_group.group_name %}">
-        {% include 'a_rtchat/partials/modal_chat_leave.html' %}
-    </a>
-    {% endif %} {% endcomment %}
 </wrapper>
 
-{% endblock %}
+<!-- Room name for JS -->
+<span id="room-name" hidden>{{ chat_group.chat_name|json_script:"room-name" }}</span>
 
-
-{% block javascript %}
+<!-- WebSocket JS -->
 <script>
+const roomName = JSON.parse(document.getElementById('room-name').textContent);
 
-    function scrollToBottom(time=0) {
-        setTimeout(function() {
-            const container = document.getElementById('chat_container');
-            container.scrollTop = container.scrollHeight;
-        }, time);
+const chatSocket = new WebSocket(
+    'ws://' + window.location.host + '/ws/chat/' + roomName + '/'
+);
+
+const log = document.getElementById('chat_messages');
+const input = document.getElementById('chat-message-input');
+
+chatSocket.onmessage = function(e) {
+    const data = JSON.parse(e.data);
+    const div = document.createElement('div');
+    div.textContent = `${data.author}: ${data.content}`;
+    div.classList.add('p-1', 'text-white', 'rounded-md');
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;  // auto-scroll
+};
+
+chatSocket.onclose = function(e) {
+    console.error('Chat socket closed unexpectedly');
+};
+
+// Enter key to send
+input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        document.getElementById('chat-message-submit').click();
     }
-    scrollToBottom()
+});
 
+// Send button click
+document.getElementById('chat-message-submit').addEventListener('click', function() {
+    const message = input.value.trim();
+    if (message) {
+        chatSocket.send(JSON.stringify({ content: message }));
+        input.value = '';
+    }
+});
 </script>
+
+
 {% endblock %}

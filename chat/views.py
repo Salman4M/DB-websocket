@@ -14,18 +14,19 @@ def chat_view(request,chat_name='new-chat'):
     if chat_group.private:
         if request.user not in chat_group.members.all():
             raise Http404("You are not allowed to access this chat.")
-        for member in chat_group.members.all():
-            if member!=request.user:
-                other_user=member
-                break
+        # for member in chat_group.members.all():
+        #     if member!=request.user:
+        #         other_user=member
+        #         break
 
     if chat_group.groupchat_name:
         if request.user not in chat_group.members.all():
             chat_group.members.add(request.user)
         
 
-    if request.htmx:
-        form=ChatMessageCreateForm(request.POST)
+    if request.method=='POST':
+        print('----------------------AAAAAAAAAAAAAAAA--------------------')
+        form=ChatMessageCreateForm(request.POST or None)
         if form.is_valid():
             messages=form.save(commit=False)
             messages.author=request.user

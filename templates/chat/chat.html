@@ -59,6 +59,7 @@
         </div>
     </div>
 </wrapper>
+<div id="typing-indicator" class="text-sm text-gray-300 mt-1"></div>
 
 <!-- Room name for JS -->
 <span id="room-name" hidden>{{ chat_group.chat_name|json_script:"room-name" }}</span>
@@ -73,15 +74,29 @@ const chatSocket = new WebSocket(
 
 const log = document.getElementById('chat_messages');
 const input = document.getElementById('chat-message-input');
+const typingDiv = document.getElementById('typing-indicator');  // 👈 add <div id="typing-indicator"></div> in HTML
+
+let typingTimeout;
 
 chatSocket.onmessage = function(e) {
     const data = JSON.parse(e.data);
-    const div = document.createElement('div');
-    div.textContent = `${data.author}: ${data.content}`;
-    div.classList.add('p-1', 'text-white', 'rounded-md');
-    log.appendChild(div);
-    log.scrollTop = log.scrollHeight;  // auto-scroll
+
+    if (data.action === "new_message") {
+        const div = document.createElement('div');
+        div.textContent = `${data.author}: ${data.content}`;
+        div.classList.add('p-1', 'text-white', 'rounded-md');
+        log.appendChild(div);
+        log.scrollTop = log.scrollHeight;  // auto-scroll
+    }
+
+    else if (data.action === "typing") {
+        const currentUser = "{{ request.user.username }}"; // 👈 inject from Django template
+        if (data.user !== currentUser) {  // 👈 only show others typing
+            typingDiv.textContent = data.typing ? `${data.user} is typing...` : "";
+        }
+    }
 };
+
 
 chatSocket.onclose = function(e) {
     console.error('Chat socket closed unexpectedly');
@@ -90,6 +105,7 @@ chatSocket.onclose = function(e) {
 // Enter key to send
 input.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();  // stop newline
         document.getElementById('chat-message-submit').click();
     }
 });
@@ -102,7 +118,20 @@ document.getElementById('chat-message-submit').addEventListener('click', functio
         input.value = '';
     }
 });
+
+// 👇 Typing detection
+input.addEventListener('input', function() {
+    chatSocket.send(JSON.stringify({ typing: true }));
+
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => {
+        chatSocket.send(JSON.stringify({ typing: false }));
+    }, 1000);
+});
 </script>
 
 
+
 {% endblock %}
+
+
